@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const { Client } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -39,20 +39,9 @@ function verifyToken(req, res, next) {
 let qrCode = null;
 
 // Inicializar cliente de WhatsApp con configuraciones de Puppeteer
+// Usar LocalAuth para mantener la sesión
 const client = new Client({
-    puppeteer: {
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu',
-        ],
-        headless: true,
-    },
+    authStrategy: new LocalAuth()  // Esto guarda la sesión de forma local
 });
 
 client.on('qr', (qr) => {
