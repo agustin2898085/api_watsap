@@ -1,10 +1,11 @@
 require('dotenv').config();
 const express = require('express');
+const puppeteer = require('puppeteer-core');
 const bodyParser = require('body-parser');
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const jwt = require('jsonwebtoken');
-
+const fs = require('fs');
 const app = express();
 const SECRET_KEY = process.env.SECRET_KEY;
 const port = process.env.PORT || 3000;
@@ -38,8 +39,11 @@ function verifyToken(req, res, next) {
 
 let qrCode = null;
 
-// Inicializar cliente de WhatsApp
-const client = new Client();
+const client = new Client({
+    puppeteer: {
+        headless: true, // Opcional: si no quieres ver el navegador
+    }
+});
 
 client.on('qr', (qr) => {
     qrCode = qr;
