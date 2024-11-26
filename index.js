@@ -1,50 +1,120 @@
+require('dotenv').config();
+
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const bodyParser = require('body-parser');
+const { Client } = require('whatsapp-web.js');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+const SECRET_KEY = process.env.SECRET_KEY;
 const port = process.env.PORT || 3000;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-// Crear el cliente de WhatsApp con autenticación local
+// Configuración de Express
+app.use(bodyParser.json());
+
+app.get('/', (req, res) => {
+    res.send('¡Hola Mundo desde Node.js y Vercel!');
+});
+
+// Middleware para verificar el Bearer Token
+function verifyToken(req, res, next) {
+    const token = req.headers['authorization'];
+    if (!token) {
+        return res.status(403).json({ message: 'Token no proporcionado' });
+    }
+
+    const bearerToken = token.split(' ')[1];
+
+    jwt.verify(bearerToken, SECRET_KEY, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ message: 'Token inválido' });
+        }
+        req.user = decoded;
+        next();
+    });
+}
+
+let qrCode = null;
+
+// Inicializar cliente de WhatsApp con configuraciones de Puppeteer
 const client = new Client({
-  authStrategy: new LocalAuth(), // Usa LocalAuth para guardar la sesión localmente
+    puppeteer: {
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+        ],
+        headless: true,
+    },
 });
 
 client.on('qr', (qr) => {
-  // Imprimir el código QR en la consola
-  qrcode.generate(qr, { small: true });
+    qrCode = qr;
+    console.log('QR generado:', qr);
 });
 
 client.on('ready', () => {
-  console.log('El cliente de WhatsApp está listo');
+    console.log('Cliente de WhatsApp listo!');
 });
 
-client.on('message', (message) => {
-  console.log('Mensaje recibido:', message.body);
+client.on('auth_failure', (msg) => {
+    console.error('Error de autenticación con WhatsApp:', msg);
 });
 
-// Inicia el cliente de WhatsApp
+client.on('disconnected', (reason) => {
+    console.log('Cliente de WhatsApp desconectado:', reason);
+    client.initialize();
+});
+
 client.initialize();
 
-// Configuración de la ruta de la API
-app.get('/send-message', async (req, res) => {
-  const { phone, message } = req.query;
+// Endpoint para obtener el QR
+app.get('/get-qr', verifyToken, (req, res) => {
+    if (qrCode) {
+        res.status(200).json({ qrCode });
+    } else {
+        res.status(404).json({ message: 'QR aún no generado' });
+    }
+});
 
-  if (!phone || !message) {
-    return res.status(400).send('Faltan parámetros');
-  }
+// Endpoint para enviar mensaje
+app.post('/send-message', verifyToken, (req, res) => {
+    if (!client.info || !client.info.pushname) {
+        return res.status(503).json({ success: false, message: 'Cliente de WhatsApp no inicializado.' });
+    }
 
-  try {
-    const chat = await client.getChatById(`${phone}@c.us`);
-    chat.sendMessage(message);
-    res.send('Mensaje enviado correctamente');
-  } catch (error) {
-    console.error('Error al enviar mensaje:', error);
-    res.status(500).send('Error al enviar mensaje');
-  }
+    const { telefono, mensaje } = req.body;
+    const chatId = `${telefono}@c.us`;
+
+    client.sendMessage(chatId, mensaje)
+        .then(() => {
+            res.status(200).json({ success: true, message: 'Mensaje enviado correctamente.' });
+        })
+        .catch((err) => {
+            res.status(500).json({ success: false, message: 'Error al enviar el mensaje.', error: err });
+        });
+});
+
+// Endpoint para generar un token
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        const token = jwt.sign({ username: 'admin' }, SECRET_KEY, { expiresIn: '1h' });
+        res.json({ token });
+    } else {
+        res.status(401).json({ message: 'Credenciales incorrectas' });
+    }
 });
 
 // Iniciar servidor
 app.listen(port, () => {
-  console.log(`Servidor corriendo en el puerto ${port}`);
+    console.log(`Servidor corriendo en http://127.0.0.1:${port}`);
 });
