@@ -1,3 +1,5 @@
+const puppeteer = require('puppeteer-core');
+const chrome = require('chrome-aws-lambda');
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -37,42 +39,47 @@ function verifyToken(req, res, next) {
 
 let qrCode = null;
 
-// Inicializar cliente de WhatsApp con configuraciones de Puppeteer
-const client = new Client({
-    puppeteer: {
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu',
-        ],
-        headless: true,
-    },
-});
+// Inicialización del cliente de WhatsApp
+async function initializeClient() {
+    const client = new Client({
+        puppeteer: {
+            executablePath: await chrome.executablePath,
+            args: chrome.args,
+            defaultViewport: chrome.defaultViewport,
+            headless: chrome.headless,
+        },
+    });
 
-client.on('qr', (qr) => {
-    qrCode = qr;
-    console.log('QR generado:', qr);
-});
+    client.on('qr', (qr) => {
+        qrCode = qr;
+        console.log('QR generado:', qr);
+    });
 
-client.on('ready', () => {
-    console.log('Cliente de WhatsApp listo!');
-});
+    client.on('ready', () => {
+        console.log('Cliente de WhatsApp listo!');
+    });
 
-client.on('auth_failure', (msg) => {
-    console.error('Error de autenticación con WhatsApp:', msg);
-});
+    client.on('auth_failure', (msg) => {
+        console.error('Error de autenticación con WhatsApp:', msg);
+    });
 
-client.on('disconnected', (reason) => {
-    console.log('Cliente de WhatsApp desconectado:', reason);
-    client.initialize();
-});
+    client.on('disconnected', (reason) => {
+        console.log('Cliente de WhatsApp desconectado:', reason);
+        client.initialize();
+    });
 
-client.initialize();
+    await client.initialize();
+    return client;
+}
+
+let client;
+
+// Llamar a la función para inicializar el cliente de WhatsApp
+initializeClient().then((initializedClient) => {
+    client = initializedClient;
+}).catch((error) => {
+    console.error('Error al inicializar el cliente de WhatsApp:', error);
+});
 
 // Endpoint para obtener el QR
 app.get('/get-qr', verifyToken, (req, res) => {
