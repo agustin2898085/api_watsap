@@ -41,14 +41,7 @@ let qrCode = null;
 
 // Inicialización del cliente de WhatsApp
 async function initializeClient() {
-    const client = new Client({
-        puppeteer: {
-            executablePath: await chrome.executablePath,
-            args: chrome.args,
-            defaultViewport: chrome.defaultViewport,
-            headless: chrome.headless,
-        },
-    });
+    const client = new Client();
 
     client.on('qr', (qr) => {
         qrCode = qr;
