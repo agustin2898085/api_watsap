@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Client } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -15,7 +14,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 app.use(bodyParser.json());
 
 app.get('/', (req, res) => {
-    res.send('¡Hola Mundo desde Node.js!');
+    res.send('¡Hola Mundo desde Node.js y Vercel!');
 });
 
 // Middleware para verificar el Bearer Token
@@ -38,12 +37,26 @@ function verifyToken(req, res, next) {
 
 let qrCode = null;
 
-// Inicializar cliente de WhatsApp
-const client = new Client();
+// Inicializar cliente de WhatsApp con configuraciones de Puppeteer
+const client = new Client({
+    puppeteer: {
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+        ],
+        headless: true,
+    },
+});
 
 client.on('qr', (qr) => {
     qrCode = qr;
-    console.log('QR generado');
+    console.log('QR generado:', qr);
 });
 
 client.on('ready', () => {
@@ -64,7 +77,7 @@ client.initialize();
 // Endpoint para obtener el QR
 app.get('/get-qr', verifyToken, (req, res) => {
     if (qrCode) {
-        res.status(200).json({ qrCode: qrCode });
+        res.status(200).json({ qrCode });
     } else {
         res.status(404).json({ message: 'QR aún no generado' });
     }
@@ -94,7 +107,7 @@ app.post('/login', (req, res) => {
 
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
         const token = jwt.sign({ username: 'admin' }, SECRET_KEY, { expiresIn: '1h' });
-        res.json({ token: token });
+        res.json({ token });
     } else {
         res.status(401).json({ message: 'Credenciales incorrectas' });
     }
@@ -102,5 +115,5 @@ app.post('/login', (req, res) => {
 
 // Iniciar servidor
 app.listen(port, () => {
-    console.log(`Servidor Node.js corriendo en http://127.0.0.1:${port}`);
+    console.log(`Servidor corriendo en http://127.0.0.1:${port}`);
 });
