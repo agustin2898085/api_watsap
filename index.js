@@ -14,6 +14,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 // Configuración de Express
 app.use(bodyParser.json());
 
+app.get('/', (req, res) => {
+    res.send('¡Hola Mundo desde Node.js!');
+});
+
 // Middleware para verificar el Bearer Token
 function verifyToken(req, res, next) {
     const token = req.headers['authorization'];
