@@ -1,12 +1,11 @@
 require('dotenv').config();
 const express = require('express');
-const puppeteer = require('puppeteer-core');
 const bodyParser = require('body-parser');
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const jwt = require('jsonwebtoken');
-const fs = require('fs');
 const app = express();
+
 const SECRET_KEY = process.env.SECRET_KEY;
 const port = process.env.PORT || 3000;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
@@ -14,10 +13,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // Configuración de Express
 app.use(bodyParser.json());
-
-app.get('/', (req, res) => {
-    res.send('¡Hola Mundo desde Node.js!');
-});
 
 // Middleware para verificar el Bearer Token
 function verifyToken(req, res, next) {
@@ -37,33 +32,38 @@ function verifyToken(req, res, next) {
     });
 }
 
+// Crear cliente de WhatsApp
+let client;
 let qrCode = null;
 
-const client = new Client({
-    puppeteer: {
-        headless: true, // Opcional: si no quieres ver el navegador
-    }
-});
+const startWhatsappClient = () => {
+    client = new Client({
+        puppeteer: {
+            headless: true, // Si no quieres ver el navegador
+            executablePath: process.env.CHROME_PATH, // Especificar el path de Chromium si es necesario
+        }
+    });
 
-client.on('qr', (qr) => {
-    qrCode = qr;
-    console.log('QR generado');
-});
+    client.on('qr', (qr) => {
+        qrCode = qr;
+        console.log('QR generado');
+    });
 
-client.on('ready', () => {
-    console.log('Cliente de WhatsApp listo!');
-});
+    client.on('ready', () => {
+        console.log('Cliente de WhatsApp listo!');
+    });
 
-client.on('auth_failure', (msg) => {
-    console.error('Error de autenticación con WhatsApp:', msg);
-});
+    client.on('auth_failure', (msg) => {
+        console.error('Error de autenticación con WhatsApp:', msg);
+    });
 
-client.on('disconnected', (reason) => {
-    console.log('Cliente de WhatsApp desconectado:', reason);
+    client.on('disconnected', (reason) => {
+        console.log('Cliente de WhatsApp desconectado:', reason);
+        client.initialize();
+    });
+
     client.initialize();
-});
-
-client.initialize();
+};
 
 // Endpoint para obtener el QR
 app.get('/get-qr', verifyToken, (req, res) => {
@@ -76,7 +76,7 @@ app.get('/get-qr', verifyToken, (req, res) => {
 
 // Endpoint para enviar mensaje
 app.post('/send-message', verifyToken, (req, res) => {
-    if (!client.info || !client.info.pushname) {
+    if (!client || !client.info || !client.info.pushname) {
         return res.status(503).json({ success: false, message: 'Cliente de WhatsApp no inicializado.' });
     }
 
@@ -103,6 +103,9 @@ app.post('/login', (req, res) => {
         res.status(401).json({ message: 'Credenciales incorrectas' });
     }
 });
+
+// Iniciar el cliente de WhatsApp
+startWhatsappClient();
 
 // Iniciar servidor
 app.listen(port, () => {
